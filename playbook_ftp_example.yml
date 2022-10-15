@@ -1,0 +1,56 @@
+---
+- name: Install and configure vsFTPd Server
+  hosts: ftp-server
+  become: true
+  roles:
+    - role: fabricioboreli.ansible-role-ftp-server
+      ftp_server_banner: "Welcome to vsFTPd server"
+      users:
+        - name: alice
+          state: present
+          comment: "Alice's FTP user"
+          password: "$6$mZk4Sswk.i$MRCX2UiXUDwtCvNNeSpDpTdMxUTRoNtYjo7t0cNMPyUZ5PAF4nHAGSoVUkn65lMJTSYTMDZWSmC7a0KVCMHph/"
+
+- name: Restart vsFTPd Server
+  service:
+    name: vsftpd
+    state: restarted
+
+  tasks:
+    - name: Copy the vsFTPd configuration file to the server
+      template:
+        src: vsftpd.conf.j2
+        dest: "/etc/vsftpd.conf"
+        owner: root
+        group: root
+        mode: 0644
+      notify: Restart vsFTPd Server
+
+    - name: Create ftpusers group
+      group:
+        name: ftpusers
+        state: present
+
+    - name: Add users that are allowed to use the FTP Server
+      user:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+        comment: "{{ item.comment }}"
+        home: "/home/{{ item.name }}"
+        shell: "/bin/false"
+        password: "{{ item.password }}"
+        groups: ftpusers
+        update_password: always
+      with_items: "{{ users }}"
+
+    - name: Update APT packages list
+      apt:
+        update_cache: yes
+        cache_valid_time: 86400
+
+    - name: Install vsFTPd package
+      apt:
+        package: "{{ item }}"
+        state: present
+      with_items:
+        - vsftpd
